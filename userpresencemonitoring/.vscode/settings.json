@@ -1,0 +1,8 @@
+{
+    "appService.zipIgnorePattern": [
+        "node_modules{,/**}",
+        ".vscode{,/**}"
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/598b1ff6-846c-4675-976e-0299d3c8b69d/resourceGroups/UserPresenceMonitoring/providers/Microsoft.Web/sites/teamsuserpresence",
+    "appService.deploySubpath": "."
+}
