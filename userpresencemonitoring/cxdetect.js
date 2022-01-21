@@ -45,8 +45,7 @@ app.get('/', async(req, res) => {
 
     //let data = await subscribeCallRecords(state);
     //let data = await prodSubscribeCallRecords(state);
-    //let data = await cxdetectUpdateUserStatus(state);
-
+    let data = await cxdetectSubscribeCallRecords(state);
     //console.log(data);
     let users = await getUsers(token);
     let value = users.data.value;
@@ -67,7 +66,7 @@ app.get('/', async(req, res) => {
     let count = 0;
     try {
       console.log("start getting user presence at request");
-      delegatedToken = await getTokenDelegatedProd(state, client_id, client_secret, code);
+      delegatedToken = await getTokenDelegatedCxDetect(state, client_id, client_secret, code);
       
       var tokenDetails = {
         state: state,
@@ -92,15 +91,15 @@ app.get('/', async(req, res) => {
         let users = userPresenceResult.data.value;
         users.forEach( async(val) => {
           //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
-          //await cxdetectUpdateUserStatus(val);
+          //await prodUpdateUserStatus(val);
+          await cxdetectUpdateUserStatus(val);
           //console.log(updateResult);
         });
         
         startPolling = true;
       }
     }catch (error) {
-      delegatedToken = await getRefreshTokenDelegatedProd(state, client_id, client_secret, refresh_token);
+      delegatedToken = await getRefreshTokenDelegatedCxdetect(state, client_id, client_secret, refresh_token);
       refresh_token = delegatedToken.refresh_token;
       let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
       if(userPresenceResultV2 && userPresenceResultV2.data)
@@ -108,7 +107,7 @@ app.get('/', async(req, res) => {
         userPresenceV2 = JSON.stringify(userPresenceResultV2.data.value);
         let users = userPresenceResultV2.data.value;
         users.forEach( async(val) => {
-          //var updateResult = await updateUserStatus(val);
+          var updateResult = await updateUserStatus(val);
           await prodUpdateUserStatus(val);
           //console.log(updateResult);
         });
@@ -145,7 +144,7 @@ setInterval(async() => {
   arrDelegatedTokens.forEach( async(details, index) => {
     //await insertUsers(details.state);
     //await prodInsertUsers(details.state);
-    //await cxdetectInsertUsers(details.state);
+    await cxdetectInsertUsers(details.state);
     var delegatedToken = details.delegatedToken;
     var state =  details.state;
     var usersIds = details.usersIds;
@@ -185,54 +184,58 @@ setInterval(async() => {
       console.log('start insert value: ', value);
       link = (userData.data['@odata.nextLink'])?userData.data['@odata.nextLink']:"";
       let ids = [];
+
       value.forEach(async (val, index) => {
         ids.push(val.id);
       });
+
       userBatch.push(ids);
     }
+
     var refreshToken = delegatedToken.refresh_token;
     userBatch.forEach( async(batch, index) => {
       var usersIds = { ids: batch};
-    if(delegatedToken && delegatedToken.access_token && usersIds && startPolling){
-      try {
-        console.log("start getting user presence");
-        let userPresenceResult = await getUsersPresence(delegatedToken.access_token, usersIds);
-        console.log(JSON.stringify(userPresenceResult.data.value));
-        let users = userPresenceResult.data.value;
-        users.forEach( async(val) => {
-          //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
-          //await cxdetectUpdateUserStatus(val);
-        });
-  
-      }catch(error) {
-          try {
-        console.log("failed with the access token - retry with refresh token");
-            delegatedToken = await getRefreshTokenDelegatedProd(state, client_id, client_secret, refresh_token);
-          refresh_token = delegatedToken.refresh_token;
-          let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
-          if(userPresenceResultV2 && userPresenceResultV2.data)
-          {
-            arrDelegatedTokens[index].delegatedToken = delegatedToken;
-            userPresenceV2 = JSON.stringify(userPresenceResultV2.data.value);
-            console.log(JSON.stringify(userPresenceResultV2.data.value));
-            let users = userPresenceResultV2.data.value;
-            users.forEach( async(val) => {
-              //var updateResult = await updateUserStatus(val);
-              await prodUpdateUserStatus(val);
-              //console.log(updateResult);
-            });
-          }
-          else {
-            //do we pop it here?
-            delete arrDelegatedTokens[index];
-          }
+      if(delegatedToken && delegatedToken.access_token && usersIds && startPolling){
+        try {
+          console.log("start getting user presence");
+          let userPresenceResult = await getUsersPresence(delegatedToken.access_token, usersIds);
+          console.log(JSON.stringify(userPresenceResult.data.value));
+          let users = userPresenceResult.data.value;
+          users.forEach( async(val) => {
+            //var updateResult = await updateUserStatus(val);
+            //await prodUpdateUserStatus(val);
+            await cxdetectUpdateUserStatus(val);
+          });
+    
         }catch(error) {
-          delete arrDelegatedTokens[index];
+          try {
+            console.log("failed with the access token - retry with refresh token");
+            delegatedToken = await getRefreshTokenDelegatedCxdetect(state, client_id, client_secret, refresh_token);
+            refresh_token = delegatedToken.refresh_token;
+            let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
+            if(userPresenceResultV2 && userPresenceResultV2.data)
+            {
+              arrDelegatedTokens[index].delegatedToken = delegatedToken;
+              userPresenceV2 = JSON.stringify(userPresenceResultV2.data.value);
+              console.log(JSON.stringify(userPresenceResultV2.data.value));
+              let users = userPresenceResultV2.data.value;
+              users.forEach( async(val) => {
+                //var updateResult = await updateUserStatus(val);
+                await prodUpdateUserStatus(val);
+                //console.log(updateResult);
+              });
+            }
+            else {
+              //do we pop it here?
+              delete arrDelegatedTokens[index];
+            }
+          }catch(error) {
+              delete arrDelegatedTokens[index];
+          }
         }
       }
-    }
     });
+
     console.log("polling set interval");
   });
 
@@ -241,9 +244,9 @@ setInterval(async() => {
 // setInterval( async() => {
 //   arrDelegatedTokens.forEach( async(details, index) => {
 //     var tenant_id = details.state;
-// //     //await subscribeCallRecords(tenant_id);
-//     await prodSubscribeCallRecords(tenant_id);
-// //     //await cxdetectUpdateUserStatus(tenant_id);
+//     //await subscribeCallRecords(tenant_id);
+//     //await prodSubscribeCallRecords(tenant_id);
+//     await cxdetectSubscribeCallRecords(tenant_id);
 //     console.log("Adding webhook notification for call record");
 //   });
 // }, 3600000);
@@ -315,16 +318,19 @@ const getTokenDelegatedCxDetect = async (tenant_id, client_id, client_secret, co
       "code": code,
       "redirect_uri": "https://visibilityuserpresence-cxdetect.azurewebsites.net/"
     }
+  
     const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
+  
     return data;
   } catch(error) {
     return null;
   }
 }
+
 const getToken = async (tenant_id, client_id, client_secret ) => {
   try {
     const config = {
@@ -346,6 +352,7 @@ const getToken = async (tenant_id, client_id, client_secret ) => {
     return null;
   }
 }
+
 async function getNextPageUsers(link, token) {
   try {
     const data = await axios.get(link, {
@@ -354,6 +361,7 @@ async function getNextPageUsers(link, token) {
         'Authorization': `Bearer ${token}`
       }
     });
+  
     return data;
   }catch(error) {
     return null;
@@ -414,56 +422,54 @@ const getRefreshTokenDelegated = async (tenant_id, client_id, client_secret, cod
 
 }
 
-
-  
 const getRefreshTokenDelegatedCxdetect = async (tenant_id, client_id, client_secret, code) => {
-    try {
-      const config = {
-        "grant_type": "refresh_token",
-        "scope": "Presence.Read.All Presence.Read",
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": code,
-        "redirect_uri": "https://visibilityuserpresence-cxdetect.azurewebsites.net/" //testing only
-      }
-    
-      const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-    
-      return data;
-    }catch(error) {
-      return null;
+  try {
+    const config = {
+      "grant_type": "refresh_token",
+      "scope": "Presence.Read.All Presence.Read",
+      "client_id": client_id,
+      "client_secret": client_secret,
+      "refresh_token": code,
+      "redirect_uri": "https://visibilityuserpresence-cxdetect.azurewebsites.net/" //testing only
     }
   
-}
-  
-  const getRefreshTokenDelegatedProd = async (tenant_id, client_id, client_secret, code) => {
-    try {
-      const config = {
-        "grant_type": "refresh_token",
-        "scope": "Presence.Read.All Presence.Read",
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": code,
-        "redirect_uri": "https://visibilityuserpresence-prod.azurewebsites.net/" //testing only
+    const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
       }
-    
-      const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-    
-      return data;
-    } catch(error) {
-      return null;
-    }
+    });
+  
+    return data;
+  }catch(error) {
+    return null;
   }
 
+}
+
+const getRefreshTokenDelegatedProd = async (tenant_id, client_id, client_secret, code) => {
+  try {
+    const config = {
+      "grant_type": "refresh_token",
+      "scope": "Presence.Read.All Presence.Read",
+      "client_id": client_id,
+      "client_secret": client_secret,
+      "refresh_token": code,
+      "redirect_uri": "https://visibilityuserpresence-prod.azurewebsites.net/" //testing only
+    }
   
+    const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+  
+    return data;
+  }catch(error) {
+    return null;
+  }
+
+}
+
 const insertUsers = async(tenant_id) => {
   try {
     const data  = await axios.post(`https://dev-api.visibility.one/teams/insertUsers/${tenant_id}`, JSON.stringify(tenant_id), {

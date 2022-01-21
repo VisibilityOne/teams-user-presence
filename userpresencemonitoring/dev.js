@@ -23,6 +23,9 @@ var startPolling = false;
 var usersIds = "";
 var code ="";
 
+app.use(express.urlencoded({extended: true}));
+app.use(express.json()) // To parse the incoming requests with JSON payloads
+
 app.use(morgan('tiny'));
 app.get('/', async(req, res) => {
   
@@ -45,7 +48,7 @@ app.get('/', async(req, res) => {
 
     //let data = await subscribeCallRecords(state);
     //let data = await prodSubscribeCallRecords(state);
-    //let data = await cxdetectUpdateUserStatus(state);
+    //let data = await cxdetectSubscribeCallRecords(state);
 
     //console.log(data);
     let users = await getUsers(token);
@@ -67,13 +70,14 @@ app.get('/', async(req, res) => {
     let count = 0;
     try {
       console.log("start getting user presence at request");
-      delegatedToken = await getTokenDelegatedProd(state, client_id, client_secret, code);
+      delegatedToken = await getTokenDelegated(state, client_id, client_secret, code);
       
       var tokenDetails = {
         state: state,
         delegatedToken: delegatedToken,
         usersIds: usersIds
       };
+
       var index = arrDelegatedTokens.findIndex(elem => elem.state == state);
       if(index == -1)
       {
@@ -91,8 +95,8 @@ app.get('/', async(req, res) => {
         userPresence = JSON.stringify(userPresenceResult.data.value);
         let users = userPresenceResult.data.value;
         users.forEach( async(val) => {
-          //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
+          var updateResult = await updateUserStatus(val);
+          //await prodUpdateUserStatus(val);
           //await cxdetectUpdateUserStatus(val);
           //console.log(updateResult);
         });
@@ -100,7 +104,7 @@ app.get('/', async(req, res) => {
         startPolling = true;
       }
     }catch (error) {
-      delegatedToken = await getRefreshTokenDelegatedProd(state, client_id, client_secret, refresh_token);
+      delegatedToken = await getRefreshTokenDelegated(state, client_id, client_secret, refresh_token);
       refresh_token = delegatedToken.refresh_token;
       let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
       if(userPresenceResultV2 && userPresenceResultV2.data)
@@ -108,8 +112,9 @@ app.get('/', async(req, res) => {
         userPresenceV2 = JSON.stringify(userPresenceResultV2.data.value);
         let users = userPresenceResultV2.data.value;
         users.forEach( async(val) => {
-          //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
+          var updateResult = await updateUserStatus(val);
+          //await prodUpdateUserStatus(val);
+          //await cxdetectUpdateUserStatus(val);
           //console.log(updateResult);
         });
         startPolling = true;
@@ -162,6 +167,8 @@ setInterval(async() => {
     let users = await getUsers(token);
     if(users) {
       let value = users.data.value;
+      //console.log(state);
+      //console.log(code);
       let ids = [];
       let error = "";
   
@@ -200,31 +207,32 @@ setInterval(async() => {
         console.log(JSON.stringify(userPresenceResult.data.value));
         let users = userPresenceResult.data.value;
         users.forEach( async(val) => {
-          //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
+          var updateResult = await updateUserStatus(val);
+          //await prodUpdateUserStatus(val);
           //await cxdetectUpdateUserStatus(val);
         });
   
       }catch(error) {
           try {
         console.log("failed with the access token - retry with refresh token");
-            delegatedToken = await getRefreshTokenDelegatedProd(state, client_id, client_secret, refresh_token);
-          refresh_token = delegatedToken.refresh_token;
-          let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
-          if(userPresenceResultV2 && userPresenceResultV2.data)
-          {
-            arrDelegatedTokens[index].delegatedToken = delegatedToken;
-            userPresenceV2 = JSON.stringify(userPresenceResultV2.data.value);
-            console.log(JSON.stringify(userPresenceResultV2.data.value));
-            let users = userPresenceResultV2.data.value;
-            users.forEach( async(val) => {
-              //var updateResult = await updateUserStatus(val);
-              await prodUpdateUserStatus(val);
-              //console.log(updateResult);
-            });
-          }
-          else {
-            //do we pop it here?
+        delegatedToken = await getRefreshTokenDelegated(state, client_id, client_secret, refresh_token);
+        refresh_token = delegatedToken.refresh_token;
+        let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
+        if(userPresenceResultV2 && userPresenceResultV2.data)
+        {
+          arrDelegatedTokens[index].delegatedToken = delegatedToken;
+          userPresenceV2 = JSON.stringify(userPresenceResultV2.data.value);
+          console.log(JSON.stringify(userPresenceResultV2.data.value));
+          let users = userPresenceResultV2.data.value;
+          users.forEach( async(val) => {
+            var updateResult = await updateUserStatus(val);
+            //await prodUpdateUserStatus(val);
+            //await cxdetectUpdateUserStatus(val);
+            //console.log(updateResult);
+          });
+        }
+        else {
+          //do we pop it here?
             delete arrDelegatedTokens[index];
           }
         }catch(error) {
@@ -239,14 +247,15 @@ setInterval(async() => {
 }, 45000);
 
 // setInterval( async() => {
-//   arrDelegatedTokens.forEach( async(details, index) => {
-//     var tenant_id = details.state;
-// //     //await subscribeCallRecords(tenant_id);
-//     await prodSubscribeCallRecords(tenant_id);
-// //     //await cxdetectUpdateUserStatus(tenant_id);
-//     console.log("Adding webhook notification for call record");
-//   });
-// }, 3600000);
+//   // arrDelegatedTokens.forEach( async(details, index) => {
+//   //   var tenant_id = details.state;
+//   //   await subscribeCallRecords(tenant_id);
+//   //   //await prodSubscribeCallRecords(tenant_id);
+//   //   //await cxdetectSubscribeCallRecords(tenant_id);
+//   //   console.log("Adding webhook notification for call record");
+//   // });
+//   await subscribeJobCallRecords();
+// }, 900000);
 
 // error handler
 app.use(function(err, req, res, next) {
@@ -258,6 +267,37 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error');
 });
+
+app.post('/notification/:company_id', async (req, res) => {
+  if(req.query && req.query.validationToken) {
+    var validationToken = req.query.validationToken;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/plain; charset=UTF-8'); 
+    res.send(validationToken);
+  } else if(req.body){
+    console.log("Log req.body ken:");
+    console.log(req.body);
+    console.log("Sending Call data to dev:" + req.params.company_id);
+    await sendCallDataDev(req.params.company_id, req.body);
+    res.status(200).send('Call data receive')  
+  }  
+});
+
+const sendCallDataDev = async(company_id, callData) => {
+  try {
+    console.log("CallData: " + callData);
+    const data  = await axios.post(`https://dev-api.visibility.one/teams/notification/${company_id}?validationToken="test"`,JSON.stringify(callData), {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  
+    console.log(data);
+    return data;  
+  } catch(error) {
+    return null;
+  }
+};
 
 const getTokenDelegated = async (tenant_id, client_id, client_secret, code) => {
   try {
@@ -292,18 +332,16 @@ const getTokenDelegatedProd = async (tenant_id, client_id, client_secret, code) 
       "code": code,
       "redirect_uri": "https://visibilityuserpresence-prod.azurewebsites.net/"
     }
-  
     const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
-  
     return data;
   } catch(error) {
     return null;
   }
-}
+};
 
 const getTokenDelegatedCxDetect = async (tenant_id, client_id, client_secret, code) => {
   try {
@@ -324,7 +362,8 @@ const getTokenDelegatedCxDetect = async (tenant_id, client_id, client_secret, co
   } catch(error) {
     return null;
   }
-}
+};
+
 const getToken = async (tenant_id, client_id, client_secret ) => {
   try {
     const config = {
@@ -345,8 +384,9 @@ const getToken = async (tenant_id, client_id, client_secret ) => {
   catch(error) {
     return null;
   }
-}
-async function getNextPageUsers(link, token) {
+};
+
+const getNextPageUsers = async(link, token) =>{
   try {
     const data = await axios.get(link, {
       headers: {
@@ -358,9 +398,9 @@ async function getNextPageUsers(link, token) {
   }catch(error) {
     return null;
   }
-}
+};
 
-async function getUsers(token) {
+const getUsers = async (token) => {
   try {
     const data = await axios.get('https://graph.microsoft.com/v1.0/users', {
       headers: {
@@ -373,9 +413,9 @@ async function getUsers(token) {
   }catch(error) {
     return null;
   }
-}
+};
 
-async function getUsersPresence(token, users) {
+const getUsersPresence = async(token, users) =>{
   try {
     let data = await axios.post(`https://graph.microsoft.com/v1.0/communications/getPresencesByUserId`, JSON.stringify(users), {
       headers: {
@@ -412,10 +452,8 @@ const getRefreshTokenDelegated = async (tenant_id, client_id, client_secret, cod
     return null;
   }
 
-}
+};
 
-
-  
 const getRefreshTokenDelegatedCxdetect = async (tenant_id, client_id, client_secret, code) => {
     try {
       const config = {
@@ -426,21 +464,18 @@ const getRefreshTokenDelegatedCxdetect = async (tenant_id, client_id, client_sec
         "refresh_token": code,
         "redirect_uri": "https://visibilityuserpresence-cxdetect.azurewebsites.net/" //testing only
       }
-    
       const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
       });
-    
       return data;
     }catch(error) {
       return null;
     }
-  
-}
-  
-  const getRefreshTokenDelegatedProd = async (tenant_id, client_id, client_secret, code) => {
+};
+
+const getRefreshTokenDelegatedProd = async (tenant_id, client_id, client_secret, code) => {
     try {
       const config = {
         "grant_type": "refresh_token",
@@ -450,20 +485,17 @@ const getRefreshTokenDelegatedCxdetect = async (tenant_id, client_id, client_sec
         "refresh_token": code,
         "redirect_uri": "https://visibilityuserpresence-prod.azurewebsites.net/" //testing only
       }
-    
       const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
       });
-    
       return data;
     } catch(error) {
       return null;
     }
-  }
+};
 
-  
 const insertUsers = async(tenant_id) => {
   try {
     const data  = await axios.post(`https://dev-api.visibility.one/teams/insertUsers/${tenant_id}`, JSON.stringify(tenant_id), {
@@ -475,7 +507,7 @@ const insertUsers = async(tenant_id) => {
   } catch(error) {
     return null;
   }
-}
+};
 
 const cxdetectInsertUsers = async(tenant_id) => {
   try {
@@ -488,7 +520,7 @@ const cxdetectInsertUsers = async(tenant_id) => {
   } catch(error) {
     return null;
   }
-}
+};
 
 
 const prodInsertUsers = async(tenant_id) => {
@@ -502,7 +534,7 @@ const prodInsertUsers = async(tenant_id) => {
   } catch(error) {
     return null;
   }
-}
+};
 
 const updateUserStatus = async(user) => {
   try {
@@ -516,7 +548,7 @@ const updateUserStatus = async(user) => {
   }catch(error) {
     return null;
   }
-}
+};
 
 const cxdetectUpdateUserStatus = async(user) => {
   try {
@@ -530,7 +562,7 @@ const cxdetectUpdateUserStatus = async(user) => {
   }catch(error) {
     return null;
   }
-}
+};
 
 const prodUpdateUserStatus = async(user) => {
   try {
@@ -544,7 +576,7 @@ const prodUpdateUserStatus = async(user) => {
   }catch(error) {
     return null;
   }
-}
+};
 
 const prodSubscribeCallRecords = async(tenant_id) => {
   try {
@@ -577,6 +609,48 @@ const cxdetectSubscribeCallRecords = async(tenant_id) => {
 const subscribeCallRecords = async(tenant_id) => {
   try {
     const data  = await axios.post(`https://dev-api.visibility.one/teams/subscription/${tenant_id}`, JSON.stringify(tenant_id), {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  
+    return data;  
+  } catch(error) {
+    return null;
+  }
+};
+
+const subscribeJobCallRecords = async() => {
+  try {
+    const data  = await axios.post(`https://dev-api.visibility.one/teams/subscriptionJob`, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  
+    return data;  
+  } catch(error) {
+    return null;
+  }
+};
+
+const subscribeJobCallRecordsCxDetect = async() => {
+  try {
+    const data  = await axios.post(`https://cxdetect-api.visibility.one/teams/subscriptionJob`, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  
+    return data;  
+  } catch(error) {
+    return null;
+  }
+};
+
+const subscribeJobCallRecordsProd = async() => {
+  try {
+    const data  = await axios.post(`https://api.visibility.one/teams/subscriptionJob`, {
       headers: {
         'Content-Type': 'application/json'
       }

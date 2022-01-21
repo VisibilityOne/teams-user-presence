@@ -67,7 +67,7 @@ app.get('/', async(req, res) => {
     let count = 0;
     try {
       console.log("start getting user presence at request");
-      delegatedToken = await getTokenDelegatedProd(state, client_id, client_secret, code);
+      delegatedToken = await getTokenDelegatedVytec(state, client_id, client_secret, code);
       
       var tokenDetails = {
         state: state,
@@ -92,7 +92,7 @@ app.get('/', async(req, res) => {
         let users = userPresenceResult.data.value;
         users.forEach( async(val) => {
           //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
+          await vytecUpdateUserStatus(val);
           //await cxdetectUpdateUserStatus(val);
           //console.log(updateResult);
         });
@@ -100,7 +100,7 @@ app.get('/', async(req, res) => {
         startPolling = true;
       }
     }catch (error) {
-      delegatedToken = await getRefreshTokenDelegatedProd(state, client_id, client_secret, refresh_token);
+      delegatedToken = await getRefreshTokenDelegatedVytec(state, client_id, client_secret, refresh_token);
       refresh_token = delegatedToken.refresh_token;
       let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
       if(userPresenceResultV2 && userPresenceResultV2.data)
@@ -109,7 +109,7 @@ app.get('/', async(req, res) => {
         let users = userPresenceResultV2.data.value;
         users.forEach( async(val) => {
           //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
+          await vytecUpdateUserStatus(val);
           //console.log(updateResult);
         });
         startPolling = true;
@@ -201,14 +201,14 @@ setInterval(async() => {
         let users = userPresenceResult.data.value;
         users.forEach( async(val) => {
           //var updateResult = await updateUserStatus(val);
-          await prodUpdateUserStatus(val);
+          await vytecUpdateUserStatus(val);
           //await cxdetectUpdateUserStatus(val);
         });
   
       }catch(error) {
           try {
         console.log("failed with the access token - retry with refresh token");
-            delegatedToken = await getRefreshTokenDelegatedProd(state, client_id, client_secret, refresh_token);
+            delegatedToken = await getRefreshTokenDelegatedVytec(state, client_id, client_secret, refresh_token);
           refresh_token = delegatedToken.refresh_token;
           let userPresenceResultV2 = await getUsersPresence(delegatedToken.access_token, usersIds);
           if(userPresenceResultV2 && userPresenceResultV2.data)
@@ -219,7 +219,7 @@ setInterval(async() => {
             let users = userPresenceResultV2.data.value;
             users.forEach( async(val) => {
               //var updateResult = await updateUserStatus(val);
-              await prodUpdateUserStatus(val);
+              await vytecUpdateUserStatus(val);
               //console.log(updateResult);
             });
           }
@@ -303,6 +303,29 @@ const getTokenDelegatedProd = async (tenant_id, client_id, client_secret, code) 
   } catch(error) {
     return null;
   }
+}
+
+const getTokenDelegatedVytec = async (tenant_id, client_id, client_secret, code) => {
+    try {
+      const config = {
+        "grant_type": "authorization_code",
+        "scope": "Presence.Read.All Presence.Read",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+        "redirect_uri": "https://visibilityuserpresence-vytec.azurewebsites.net/"
+      }
+    
+      const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+    
+      return data;
+    } catch(error) {
+      return null;
+    }
 }
 
 const getTokenDelegatedCxDetect = async (tenant_id, client_id, client_secret, code) => {
@@ -463,6 +486,28 @@ const getRefreshTokenDelegatedCxdetect = async (tenant_id, client_id, client_sec
     }
   }
 
+  const getRefreshTokenDelegatedVytec = async (tenant_id, client_id, client_secret, code) => {
+    try {
+      const config = {
+        "grant_type": "refresh_token",
+        "scope": "Presence.Read.All Presence.Read",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": code,
+        "redirect_uri": "https://visibilityuserpresence-vytec.azurewebsites.net/" //testing only
+      }
+    
+      const { data } = await axios.post(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, qs.stringify(config), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+    
+      return data;
+    } catch(error) {
+      return null;
+    }
+}  
   
 const insertUsers = async(tenant_id) => {
   try {
@@ -544,6 +589,20 @@ const prodUpdateUserStatus = async(user) => {
   }catch(error) {
     return null;
   }
+}
+
+const vytecUpdateUserStatus = async(user) => {
+    try {
+      const data  = await axios.post(`https://api.vcareanz.com/teams/updateUserCallStatus`, JSON.stringify(user), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    
+      return data;
+    }catch(error) {
+      return null;
+    }
 }
 
 const prodSubscribeCallRecords = async(tenant_id) => {
